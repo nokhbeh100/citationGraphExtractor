@@ -21,6 +21,30 @@ driver = None
 def strip_for_id(s):
     return s.split('/')[-2]
 
+def processPage(driver, g, paperid, direction):
+    titles = driver.find_elements_by_css_selector('a.title.au-target')
+    for t in titles:
+        newid = strip_for_id(t.get_property('href'))
+        g.add_node(newid, label=t.text)
+        if direction == 'reference':
+            g.add_edge(paperid, newid)
+        elif direction == 'citedby':            
+            g.add_edge(newid, paperid)
+
+def processMultiPage(driver, g, paperid, direction):
+    pages = driver.find_elements_by_css_selector('div.au-target.page')
+    if len(pages) == 0:
+        processPage(driver, g, paperid, direction)
+    else:
+        noOfPages = min([int(pages[-1].text), pagesLimit])
+        for pageNo in range(1, noOfPages+1):
+            print ('page:',pageNo,'/',noOfPages)
+            pages = driver.find_elements_by_css_selector('div.au-target.page')
+            pages[[p.text for p in pages].index(str(pageNo))].click()
+            time.sleep(T)
+            processPage(driver, g, paperid, direction)
+    
+
 # ready to start up headless browser
 driver = webdriver.Chrome()
 g = networkx.DiGraph()
@@ -41,26 +65,7 @@ def expand(paperid):
     time.sleep(T)
     
     if( 'reference' in driver.current_url ):        
-        pages = driver.find_elements_by_css_selector('div.au-target.page')
-        if len(pages) == 0:
-            titles = driver.find_elements_by_css_selector('a.title.au-target')
-            for t in titles:
-                newid = strip_for_id(t.get_property('href'))
-                g.add_node(newid, label=t.text)
-                g.add_edge(paperid, newid)
-    
-        else:
-            noOfPages = min([int(pages[-1].text), pagesLimit])
-            for pageNo in range(1, noOfPages+1):
-                print ('page:',pageNo,'/',noOfPages)
-                pages = driver.find_elements_by_css_selector('div.au-target.page')
-                pages[[p.text for p in pages].index(str(pageNo))].click()
-                time.sleep(T)
-                titles = driver.find_elements_by_css_selector('a.title.au-target')
-                for t in titles:
-                    newid = strip_for_id(t.get_property('href'))
-                    g.add_node(newid, label=t.text)
-                    g.add_edge(paperid, newid)
+        processMultiPage(driver, g, paperid, direction='reference')
                 
     print ('citations:')
     url = 'https://academic.microsoft.com/paper/'+paperid+'/citedby'
@@ -68,25 +73,7 @@ def expand(paperid):
 
     time.sleep(T)
     if( 'citedby' in driver.current_url ):            
-        pages = driver.find_elements_by_css_selector('div.au-target.page')
-        if len(pages) == 0:
-            titles = driver.find_elements_by_css_selector('a.title.au-target')
-            for t in titles:
-                newid = strip_for_id(t.get_property('href'))
-                g.add_node(newid, label=t.text)
-                g.add_edge(newid, paperid)
-        else:                
-            noOfPages = min([int(pages[-1].text), pagesLimit])
-            for pageNo in range(1, noOfPages+1):
-                print ('page:',pageNo,'/',noOfPages)
-                pages = driver.find_elements_by_css_selector('div.au-target.page')
-                pages[[p.text for p in pages].index(str(pageNo))].click()
-                time.sleep(T)
-                titles = driver.find_elements_by_css_selector('a.title.au-target')
-                for t in titles:
-                    newid = strip_for_id(t.get_property('href'))
-                    g.add_node(newid, label=t.text)
-                    g.add_edge(newid, paperid)
+        processMultiPage(driver, g, paperid, direction='citedby')
                 
     networkx.write_gexf(g, 'outputGraph.gexf')
 
